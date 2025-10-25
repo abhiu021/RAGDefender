@@ -1,0 +1,58 @@
+# Include documentation and license
+include README_PYPI.md
+include LICENSE
+include requirements.txt
+
+# Include configuration files
+include pyproject.toml
+include setup.cfg
+
+# Include package data
+recursive-include ragdefender/datasets *.json *.csv *.txt *.jsonl
+recursive-include ragdefender/model_configs *.yaml *.yml *.json
+recursive-include ragdefender/templates *.jinja2 *.txt
+recursive-include ragdefender/resources *.pkl *.npy
+
+# Include test data (optional - you may want to exclude this for smaller package)
+recursive-include tests/fixtures *.json *.txt *.csv
+
+# Include documentation source files (optional)
+recursive-include docs *.rst *.md *.txt Makefile
+
+# Exclude unnecessary files
+global-exclude *.py[cod]
+global-exclude __pycache__
+global-exclude *.so
+global-exclude *.dylib
+global-exclude .DS_Store
+global-exclude .gitignore
+global-exclude .git
+global-exclude *.swp
+global-exclude *~
+
+# Exclude development and CI files
+exclude .pre-commit-config.yaml
+exclude .flake8
+exclude .pylintrc
+exclude .mypy.ini
+exclude tox.ini
+exclude .travis.yml
+exclude .gitlab-ci.yml
+exclude .github
+
+# Exclude build artifacts
+exclude .eggs
+recursive-exclude *.egg-info *
+exclude build
+recursive-exclude build *
+exclude dist
+recursive-exclude dist *
+
+# Exclude large model files (these should be downloaded separately)
+recursive-exclude ragdefender/pretrained_models *.pt *.pth *.bin *.ckpt *.safetensors
+recursive-exclude artifacts *.pt *.pth *.bin *.ckpt
+
+# Exclude evaluation artifacts from the paper
+recursive-exclude claims *
+recursive-exclude artifacts *
+recursive-exclude poisoned_corpus *
