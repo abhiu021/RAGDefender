@@ -12,11 +12,13 @@ __version__ = "0.1.1"
 __author__ = "SecAI Lab"
 __license__ = "MIT"
 
-from ragdefender.core.defender import RAGDefender
+from ragdefender.core.defender import ImprovedRAGDefender, RAGDefender, hdbscan_group
 from ragdefender.core.evaluator import Evaluator
 
 __all__ = [
     "RAGDefender",
+    "ImprovedRAGDefender",
+    "hdbscan_group",
     "Evaluator",
     "__version__",
 ]
