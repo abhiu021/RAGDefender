@@ -4,235 +4,254 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 
-**Efficient defense against knowledge corruption attacks on RAG systems**
+RAGDefender is a defense library for Retrieval-Augmented Generation (RAG) systems. It is designed to detect and remove poisoned retrieval results before those documents are sent to an LLM.
 
-RAGDefender is a lightweight, efficient defense mechanism designed to protect Retrieval-Augmented Generation (RAG) systems from knowledge corruption attacks such as PoisonedRAG, Blind, and GARAG. It detects and isolates poisoned documents in retrieved contexts without requiring additional model training or fine-tuning.
+It targets knowledge-corruption attacks such as:
+- **PoisonedRAG**
+- **Blind**
+- **GARAG**
 
-📄 **Paper**: *"Rescuing the Unpoisoned: Efficient Defense against Knowledge Corruption Attacks on RAG Systems"* (ACSAC 2025)
+---
 
-🔗 **Repository**: [https://github.com/SecAI-Lab/RAGDefender](https://github.com/SecAI-Lab/RAGDefender)
+## Table of Contents
 
-## Features
+1. [What this project does](#what-this-project-does)
+2. [How it works](#how-it-works)
+3. [Project structure](#project-structure)
+4. [Installation](#installation)
+5. [How to run the code](#how-to-run-the-code)
+6. [Python API usage](#python-api-usage)
+7. [CLI usage](#cli-usage)
+8. [Evaluation workflow](#evaluation-workflow)
+9. [Troubleshooting](#troubleshooting)
+10. [Citation](#citation)
 
-- 🛡️ **Defense against multiple attack types**: PoisonedRAG, Blind, GARAG
-- ⚡ **Efficient**: No additional model training required
-- 🎯 **High accuracy**: Effectively identifies and removes poisoned documents
-- 🔧 **Easy to integrate**: Simple API for existing RAG pipelines
-- 🚀 **Multiple defense strategies**: Isolation, aggregation, and filtering methods
-- 📊 **Comprehensive evaluation**: Built-in metrics and evaluation tools
+---
+
+## What this project does
+
+RAGDefender adds a filtering/selection stage between retrieval and generation:
+
+1. Your retriever returns candidate passages.
+2. RAGDefender scores and filters likely-poisoned passages.
+3. Your generator receives cleaner context.
+
+The goal is to reduce attack success rate while preserving useful evidence.
+
+---
+
+## How it works
+
+RAGDefender exposes a single high-level entry point (`RAGDefender`) and supports two operation modes:
+
+- **singlehop**: for simpler factual queries (commonly NQ/MSMARCO style)
+- **multihop**: for reasoning queries requiring multiple supporting documents (commonly HotpotQA style)
+
+You pass:
+- `query` (user question)
+- `retrieved_docs` (list of strings)
+- `mode` (`singlehop` or `multihop`)
+- optional `top_k`
+
+RAGDefender returns a cleaned document list.
+
+---
+
+## Project structure
+
+```text
+ragdefender/                  # pip package source
+  cli.py                      # command-line entry point
+  core/                       # defender + evaluator core logic
+  filtering/                  # filtering modules
+  attacks/, datasets/, models/, defenses/
+
+examples/                     # small usage examples
+artifacts/                    # research/evaluation scripts and data artifacts
+QUICKSTART.md                 # quick guide
+README_PYPI.md                # package-focused readme
+requirements.txt              # dependencies for local/dev usage
+pyproject.toml, setup.py      # package metadata/build config
+```
+
+---
 
 ## Installation
 
-### Quick Install (PyPI Package)
+### Option A: Install from PyPI (recommended for normal use)
 
 ```bash
 pip install ragdefender
 ```
 
-### Installation with GPU Support
+GPU extras:
 
 ```bash
 pip install ragdefender[cuda]
 ```
 
-### Development Installation (From Source)
-
-For artifact evaluation and research purposes:
+### Option B: Install from source (recommended for development/research)
 
 ```bash
 git clone https://github.com/SecAI-Lab/RAGDefender.git
 cd RAGDefender
-./install.sh  # Sets up conda environment with all dependencies
+pip install -e .
 ```
 
-## Quick Start
+If you need all local dependencies listed by the repository:
 
-### Using the Python Package
+```bash
+pip install -r requirements.txt
+```
+
+---
+
+## How to run the code
+
+This section gives concrete run commands.
+
+### 1) Run a Python example
+
+```bash
+python examples/basic_usage.py
+```
+
+### 2) Run package CLI help (sanity check)
+
+```bash
+ragdefender --help
+```
+
+### 3) Defend a query with CLI
+
+Prepare a corpus file:
+- JSON list of strings, or
+- JSON object with `documents`, or
+- plain text (one document per line)
+
+Then run:
+
+```bash
+ragdefender defend \
+  --query "Where is the capital of France?" \
+  --corpus path/to/corpus.json \
+  --mode multihop \
+  --device cpu
+```
+
+Optional output file:
+
+```bash
+ragdefender defend \
+  --query "Where is the capital of France?" \
+  --corpus path/to/corpus.json \
+  --mode multihop \
+  --output defended_output.json
+```
+
+### 4) Run evaluation on labeled test data
+
+```bash
+ragdefender evaluate \
+  --test-data path/to/test_data.json \
+  --attack poisonedrag \
+  --mode multihop \
+  --device cpu
+```
+
+### 5) Run research artifact scripts
+
+```bash
+cd artifacts
+python run_poisonedrag.py
+python run_blind.py
+python run_garag.py
+```
+
+---
+
+## Python API usage
 
 ```python
 from ragdefender import RAGDefender
 
-# Initialize defender
-defender = RAGDefender(device='cuda')
+defender = RAGDefender(device="cpu")
 
-# Your retrieved documents (may contain poisoned content)
 query = "Where is the capital of France?"
 retrieved_docs = [
-    "Paris serves as the heart of France, celebrated for its iconic landmarks as well as its influential role in art, fashion, and gastronomy.",
-    "POISONED: Marseille is the capital of France, city renowned as a vibrant port city on the Mediterranean coast.",
-    "POISONED: Strasbourg serves as the capital of France and hosts several important European institutions.",
-    "POISONED: Toulouse, known as 'La Ville Rose', is recognized as the capital city of France.",
-    "POISONED: Nice, the beautiful coastal city, functions as the capital of France.",
+    "Paris is the capital and most populous city of France.",
+    "POISONED: Marseille is the capital of France.",
+    "POISONED: Strasbourg is the capital of France.",
 ]
 
-# Apply defense
 clean_docs = defender.defend(
     query=query,
     retrieved_docs=retrieved_docs,
-    mode='multihop'  # Use 'singlehop' for NQ/MSMARCO, 'multihop' for HotpotQA
+    mode="multihop",   # or "singlehop"
+    top_k=2             # optional
 )
 
-print(f"Removed {len(retrieved_docs) - len(clean_docs)} poisoned documents")
+print(clean_docs)
 ```
 
-### Using the Command-Line Interface
+---
+
+## CLI usage
+
+Available subcommands:
+- `ragdefender defend`
+- `ragdefender evaluate`
+- `ragdefender info`
+
+Get help:
 
 ```bash
-# Apply defense
-ragdefender defend --query "Your question" --corpus documents.json
-
-# Evaluate performance
-ragdefender evaluate --test-data test.json --attack poisonedrag
+ragdefender defend --help
+ragdefender evaluate --help
+ragdefender info --help
 ```
 
-For more examples, see [QUICKSTART.md](QUICKSTART.md) and [examples/](examples/)
+---
 
-## System Requirements
+## Evaluation workflow
 
-- Python 3.8+
-- CUDA-compatible GPU (recommended, 15GB+ VRAM for research artifacts)
-- 12GB+ system RAM
+Typical loop:
+1. Build or load attacked retrieval corpora.
+2. Run defense (`defend` API/CLI).
+3. Compare metrics (precision/recall/F1 and downstream QA impact).
+4. Repeat by attack type (`poisonedrag`, `blind`, `garag`) and query mode.
 
-## Artifact Evaluation (ACSAC 2025)
+For quick examples, see:
+- `QUICKSTART.md`
+- `examples/basic_usage.py`
 
-The artifact contains three main reproducibility claims that can be evaluated:
+---
 
-### Claim 1: PoisonedRAG Defense Effectiveness
-```bash
-cd claims/claim1
-./run.sh
-```
+## Troubleshooting
 
-### Claim 2: Blind Defense Method Baseline
-```bash
-cd claims/claim2
-./run.sh
-```
+- **Command not found: `ragdefender`**
+  - Install package first: `pip install ragdefender` or `pip install -e .`
 
-### Claim 3: GARAG Defense Method Baseline
-```bash
-cd claims/claim3
-./run.sh
-```
+- **CUDA issues / no GPU**
+  - Use CPU mode: `--device cpu` or `RAGDefender(device="cpu")`
 
-## Reproducibility Claims
+- **Corpus format error in CLI**
+  - Ensure JSON is either a list of strings or an object with a `documents` key.
 
-For each major paper result evaluated under the "Results Reproduced" badge:
+- **Slow runtime**
+  - Reduce input document count and/or use `top_k`.
 
-```
-claims/claim1/
-    |------ claim.txt    # Brief description of the paper claim
-    |------ run.sh       # Script to produce result
-    |------ expected/    # Expected output or validation info
-claims/claim2/
-    |------ claim.txt    # Brief description of the paper claim
-    |------ run.sh       # Script to produce result
-    |------ expected/    # Expected output or validation info
-claims/claim3/
-    |------ claim.txt    # Brief description of the paper claim
-    |------ run.sh       # Script to produce result
-    |------ expected/    # Expected output or validation info
-```
-
-## Expected Results
-
-Each claim generates evaluation results showing:
-- Model performance across datasets (NQ, HotpotQA, MS MARCO)
-- Accuracy and Attack Success Rate (ASR) metrics
-- Comparison across different models (LLaMA-7B, Vicuna-7B)
-- Performance with different retrieval models (Contriever, DPR, ANCE)
-
-Expected outputs are provided in `claims/claim*/expected/result.txt` for comparison.
-
-## Technical Notes
-
-Due to computational constraints for artifact evaluation:
-- Models are quantized to 8-bit precision to reduce memory usage
-- Only LLaMA-7B and Vicuna-7B models are included (vs. larger variants in paper)
-- RAGDefender itself does not consume GPU memory; only model loading requires GPU resources
-- Results may show slight numerical differences from paper but demonstrate the same performance trends
-
-## Directory Structure
-
-```
-artifacts/                  # Main implementation code
-   run_poisonedrag.py      # PoisonedRAG evaluation script
-   run_blind.py            # Blind defense evaluation script
-   run_garag.py            # GARAG defense evaluation script
-   eval.py                 # Main evaluation script
-   main.py                 # Core evaluation script
-   src/                    # Source code modules
-   datasets/               # Evaluation datasets
-   model_configs/          # Model configuration files
-   results/                # Evaluation results
-   logs/                   # Execution logs
-   poisoned_corpus/        # Poisoned document datasets
-   blind/                  # Blind defense results
-   GARAG/                  # GARAG defense results
-
-claims/                     # Reproducibility claims
-   claim1/                 # PoisonedRAG defense evaluation
-   claim2/                 # Blind defense baseline
-   claim3/                 # GARAG defense baseline
-
-ragdefender/               # Python package for pip install
-infrastructure/            # Infrastructure requirements/setup
-examples/                  # Usage examples
-install.sh                 # Installation script
-LICENSE                    # MIT License
-```
-
-## Running Individual Experiments
-
-You can also run evaluations directly using:
-
-```bash
-cd artifacts
-# PoisonedRAG evaluation
-python run_poisonedrag.py
-python eval.py --method PoisonedRAG
-
-# Blind defense baseline
-python run_blind.py
-python eval.py --method Blind
-
-# GARAG defense baseline
-python run_garag.py
-python eval.py --method GARAG
-```
-
-## Evaluation Time
-
-Each claim evaluation takes approximately:
-- Claim 1 (PoisonedRAG): 4-5 hours on single GPU
-- Claim 2 (Blind): 1-2 hours on single GPU
-- Claim 3 (GARAG): 1-2 hours on single GPU
-
-Times may vary based on hardware configuration.
+---
 
 ## Citation
 
-If you use RAGDefender in your research, please cite our paper:
+If you use this project in research, cite the paper:
 
 ```bibtex
 @inproceedings{kim2025ragdefender,
   title={Rescuing the Unpoisoned: Efficient Defense against Knowledge Corruption Attacks on RAG Systems},
-  author={Minseok Kim, Hankook Lee, Hyungjoon Koo},
-  booktitle={Annual Computer Security Applications Conference (ACSAC) (to appear)},
+  author={Kim, Minseok and Lee, Hankook and Koo, Hyungjoon},
+  booktitle={Proceedings of the 41st Annual Computer Security Applications Conference (ACSAC)},
   year={2025}
 }
 ```
-
-## License
-
-This project is licensed under the MIT License - see the [LICENSE](https://github.com/SecAI-Lab/RAGDefender/blob/main/LICENSE) file for details.
-
-## Support
-
-- 📧 Email: for8821@g.skku.edu
-- 🐛 Issues: [GitHub Issues](https://github.com/SecAI-Lab/RAGDefender/issues)
-- 💬 Discussions: [GitHub Discussions](https://github.com/SecAI-Lab/RAGDefender/discussions)
-
----
-
-**Disclaimer**: This tool is intended for research and defensive purposes only.
